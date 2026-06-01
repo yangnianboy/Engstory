@@ -319,6 +319,11 @@ function renderStory() {
     `;
   }).join('');
 
+  // 逐行延迟入场（staggered entrance）
+  content.querySelectorAll('.sentence-row').forEach((row, i) => {
+    row.style.animationDelay = `${i * 0.03}s`;
+  });
+
   // 仅右侧 toggle 区域触发翻译
   content.querySelectorAll('.sentence-toggle').forEach(toggle => {
     toggle.addEventListener('click', (e) => {

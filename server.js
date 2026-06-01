@@ -46,7 +46,7 @@ app.post('/api/translate', async (req, res) => {
     // 最多尝试 3 次，确保句数匹配
     for (let attempt = 0; attempt < 3; attempt++) {
       const prompt = buildTranslationPrompt(storyBody, sentenceCount);
-      const result = await callDeepSeek(prompt, { max_tokens: 4096, temperature: 0.3 });
+      const result = await callDeepSeek(prompt, { model: 'deepseek-v4-flash', max_tokens: 4096, temperature: 0.3 });
       translations = parseTranslationResponse(result);
       if (translations.length === sentenceCount) break;
       console.log(`翻译句数不匹配：期望 ${sentenceCount}，实际 ${translations.length}，重试第 ${attempt + 1} 次`);
@@ -89,11 +89,11 @@ async function callDeepSeek(userPrompt, opts = {}) {
       'Authorization': `Bearer ${DEEPSEEK_KEY}`,
     },
     body: JSON.stringify({
-      model: 'deepseek-v4-pro',
+      model: opts.model || 'deepseek-v4-pro',
       messages: [{ role: 'user', content: userPrompt }],
       max_tokens: opts.max_tokens || 4096,
       temperature: opts.temperature ?? 0.7,
-      thinking: { type: 'enabled' },
+      thinking: opts.model === 'deepseek-v4-flash' ? undefined : { type: 'enabled' },
     }),
   });
 

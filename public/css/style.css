@@ -273,12 +273,18 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
   color: var(--text-on-dark);
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
-  transition: all 0.2s;
   cursor: default;
+  animation: chipIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
 }
 .word-chip:hover {
   background: rgba(255,255,255,0.08);
   border-color: rgba(255,255,255,0.15);
+  transform: translateY(-1px);
 }
 .word-chip .remove-chip {
   cursor: pointer; opacity: 0.3;
@@ -320,6 +326,9 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
 .btn-generate:hover:not(:disabled)::before {
   transform: scaleY(1);
 }
+.btn-generate:active:not(:disabled) {
+  transform: scale(0.985);
+}
 .btn-generate:disabled {
   opacity: 0.2;
   cursor: not-allowed;
@@ -355,9 +364,15 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
 }
 .loading-fill {
   height: 100%;
-  background: var(--red);
+  background: linear-gradient(90deg, var(--red) 0%, #e8615e 40%, var(--red) 70%);
+  background-size: 200% 100%;
   width: 0%;
   transition: width 0.8s cubic-bezier(0.2, 0, 0, 1);
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* ==== ERROR ==== */
@@ -385,12 +400,26 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
   padding: 0 24px 48px;
   max-width: 720px;
   margin: 0 auto;
-  animation: fadeUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 .story-section.hidden { display: none; }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
+/* Spring entrance — story card */
+.story-card {
+  animation: springIn 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes springIn {
+  0%   { opacity: 0; transform: translateY(24px) scale(0.98); }
+  60%  { opacity: 1; transform: translateY(-3px) scale(1.002); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Staggered sentence entrance */
+.sentence-row {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: sentenceIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+@keyframes sentenceIn {
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -492,13 +521,16 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
   display: flex;
   align-items: flex-start;
   padding: 10px 0 10px 20px;
-  transition: background 0.15s ease, border-color 0.25s ease;
+  transition: background 0.15s ease, border-color 0.25s ease, padding-left 0.2s ease;
   font-family: var(--body);
   font-size: 17px;
   line-height: 1.8;
   color: var(--text);
   border-left: 2px solid transparent;
   will-change: border-color;
+}
+.sentence-row:hover {
+  padding-left: 24px;
 }
 .sentence-row.has-vocab {
   border-left-color: rgba(0,0,0,0.1);
@@ -558,7 +590,7 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
 .translation-wrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s ease;
+  transition: grid-template-rows 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 .translation-wrapper.open {
   grid-template-rows: 1fr;
@@ -578,8 +610,9 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
   padding: 8px 0;
   margin: 4px 0 8px 0;
   opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.25s ease 0.1s, transform 0.25s ease 0.1s;
+  transform: translateY(-6px);
+  transition: opacity 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.12s,
+              transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.12s;
 }
 .translation-wrapper.open .translation-text-inner {
   opacity: 1;
@@ -772,10 +805,14 @@ h1, h2, h3 { font-weight: 500; line-height: 1.2; }
   border: 1px solid var(--rule-light);
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   z-index: 100;
-  animation: toastIn 0.3s ease, toastOut 0.3s ease 1.7s forwards;
+  animation: toastSpringIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+             toastOut 0.25s ease 1.7s forwards;
 }
-@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-@keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes toastSpringIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes toastOut { to { opacity: 0; transform: translateX(-50%) translateY(-4px); } }
 
 /* ==== SCROLLBAR ==== */
 ::-webkit-scrollbar { width: 4px; }
