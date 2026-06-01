@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill //F //PID 139076)",
+      "Bash(curl -s -X POST http://localhost:3456/api/generate-story -H \"Content-Type: application/json\" -d \"{\\\\\"words\\\\\":[\\\\\"serendipity\\\\\",\\\\\"ephemeral\\\\\"]}\")",
+      "Bash(curl -s -X POST http://localhost:3456/api/generate-story -H \"Content-Type: application/json\" -d \"{\\\\\"words\\\\\":[\\\\\"abandon\\\\\",\\\\\"abstract\\\\\"]}\")",
+      "Bash(npm run *)",
+      "Bash(curl -s https://api.moonshot.ai/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s https://api.moonshot.cn/v1/chat/completions -H 'Content-Type: application/json' -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s -X POST http://localhost:3456/api/ocr -H 'Content-Type: application/json' -d '{\"image\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"}')",
+      "mcp__codegraph__codegraph_trace",
+      "Bash(curl -s -X POST http://localhost:3456/api/translate -H 'Content-Type: application/json' -d '{\"storyBody\":\"The **abandoned** mansion stood silently on the hill. She walked through the creaking door and **gazed** at the dusty room.\",\"sentenceCount\":2}')",
+      "Bash(curl -s -X POST http://localhost:3456/api/translate -H 'Content-Type: application/json' -d '{\"sentences\":[\"hello\",\"world\"]}')",
+      "Bash(curl -s -X POST http://localhost:3456/api/translate -H 'Content-Type: application/json' -d '{\"storyBody\":\"The **abandoned** mansion stood silently on the hill. She walked through the creaking door and **gazed** at the dusty room. The **catastrophe** had left its mark everywhere.\",\"sentenceCount\":3}')",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -X POST http://localhost:3456/api/generate-story -H 'Content-Type: application/json' -d '{\"words\":[\"abandon\",\"brilliant\",\"catastrophe\",\"dilemma\",\"eloquent\",\"frugal\",\"gratitude\",\"hostile\",\"imminent\",\"jubilant\"]}')",
+      "Bash(curl -s http://localhost:3456/)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

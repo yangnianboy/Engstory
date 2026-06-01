@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EngStory · Teletype Bureau</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d9413e' stroke-width='2'><path d='M4 19.5A2.5 2.5 0 016.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z'/></svg>">
+  <!-- Fonts: Newsreader (display) + Crimson Pro (body) + IBM Plex Mono (UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,16..72,400;0,16..72,500;0,16..72,600;1,16..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- ===== Header ===== -->
+  <header class="site-header">
+    <div class="inner">
+      <div class="site-brand">
+        <h1>EngStory</h1>
+        <span class="tagline">Teletype Bureau</span>
+      </div>
+      <div class="header-actions">
+        <button id="historyBtn" class="btn-ghost">History</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ===== Input Section ===== -->
+    <section id="inputSection" class="input-section">
+
+      <!-- Mode Switch -->
+      <div class="mode-switch">
+        <button class="mode-tab active" data-mode="text">Text Input</button>
+        <button class="mode-tab" data-mode="image">Image Upload</button>
+      </div>
+
+      <!-- Text Input -->
+      <div id="textInputPanel">
+        <textarea id="wordInput"
+          class="word-textarea"
+          placeholder="Paste or type English vocabulary words, separated by commas, spaces, or line breaks...&#10;e.g. abandon, abstract, academy, accelerate..."></textarea>
+      </div>
+
+      <!-- Image Input -->
+      <div id="imageInputPanel" class="image-panel hidden">
+        <div id="imageDropZone" class="dropzone">
+          <input type="file" id="imageFileInput" accept="image/*">
+          <div id="imageDropContent">
+            <div class="dropzone-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="20" height="15" rx="2"/><circle cx="12" cy="14" r="3"/><path d="M9 3h6l2 3h3a2 2 0 012 2"/></svg></div>
+            <div class="dropzone-text">Drop image or click to upload &middot; JPG/PNG &middot; &le; 5 MB</div>
+          </div>
+          <div id="imagePreview" class="dropzone-preview hidden">
+            <img id="previewImg" alt="Preview">
+            <button id="removeImage" class="dropzone-remove">&#x2715;</button>
+          </div>
+        </div>
+        <button id="ocrBtn" class="btn-ocr">Scan Words from Image</button>
+      </div>
+
+      <!-- Word Chips -->
+      <div id="wordChips" class="word-chips-panel hidden">
+        <div class="chips-header">
+          <span id="wordCount" class="chips-count">0 words</span>
+          <span class="chips-divider"></span>
+          <button id="clearWords" class="chips-clear">Clear All</button>
+        </div>
+        <div id="chipsContainer" class="chips-container"></div>
+      </div>
+
+      <!-- Generate -->
+      <button id="generateBtn" class="btn-generate"><span>Generate Story</span></button>
+
+      <!-- Loading -->
+      <div id="loadingBar" class="loading-bar hidden">
+        <div class="loading-label">
+          <span id="loadingStep">Composing...</span>
+          <span class="loading-cursor"></span>
+        </div>
+        <div class="loading-track">
+          <div id="loadingProgress" class="loading-fill" style="width:0%"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Error ===== -->
+    <div id="errorBanner" class="error-banner hidden">
+      <span>Error</span>
+      <span id="errorText" style="flex:1"></span>
+      <button id="dismissError" class="error-dismiss">&#x2715;</button>
+    </div>
+
+    <!-- ===== Story Page ===== -->
+    <section id="storySection" class="story-section hidden">
+      <button id="backToInput" class="btn-back">← Back to Input</button>
+      <article class="story-card">
+
+        <!-- Card Header -->
+        <div class="card-header">
+          <h2 id="storyTitle" class="story-title"></h2>
+          <div id="storyMeta" class="story-meta"></div>
+          <div class="card-toolbar">
+            <button id="toggleAllBtn" class="btn-tool">Show All CN</button>
+            <button id="copyEnBtn" class="btn-tool">Copy EN</button>
+            <button id="copyBilingualBtn" class="btn-tool">Copy EN+CN</button>
+            <button id="printBtn" class="btn-tool">Print</button>
+          </div>
+        </div>
+
+        <!-- Story Body -->
+        <div class="card-body">
+          <div id="storyContent"></div>
+        </div>
+
+        <!-- Word Tracker -->
+        <div class="card-tracker">
+          <div class="tracker-header">
+            <span class="tracker-label">Word Tracker</span>
+            <span id="trackerStats" class="tracker-stats"></span>
+          </div>
+          <div class="tracker-bar">
+            <div id="trackerBar" class="tracker-bar-fill" style="width:0%"></div>
+          </div>
+          <div class="tracker-row">
+            <span class="tracker-row-label">Used</span>
+            <div id="usedWords" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+          <div id="missingRow" class="tracker-row hidden">
+            <span class="tracker-row-label">Missing</span>
+            <div id="missingWords" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+  </main>
+
+  <!-- ===== History ===== -->
+  <div id="historyOverlay" class="history-overlay hidden"></div>
+  <aside id="historyPanel" class="history-panel translate-x-full hidden">
+    <div class="history-header">
+      <h3>Archive</h3>
+      <button id="closeHistory" class="history-close">&#x2715;</button>
+    </div>
+    <div id="historyList" class="history-list">
+      <p style="font-family:var(--mono);font-size:11px;color:var(--text-on-dark-dim);text-align:center;padding:32px 0;text-transform:uppercase;letter-spacing:1px">No history yet</p>
+    </div>
+  </aside>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

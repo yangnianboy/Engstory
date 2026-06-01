@@ -1,0 +1,14 @@
+{
+  "name": "engstory",
+  "version": "1.0.0",
+  "description": "英语生词故事生成器 — 输入生词，LLM 生成英文故事帮助记忆",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0"
+  }
+}
