@@ -27,8 +27,9 @@ app.post('/api/generate-story', async (req, res) => {
       const isRetry = attempt > 0;
       const prompt = buildStoryPrompt(words, isRetry ? validation?.reason : null);
       const result = await callDeepSeek(prompt, {
-        max_tokens: 4096,
-        temperature: isRetry ? 0.4 : 0.8,  // 重试时降低温度，提高格式遵循度
+        max_tokens: 16384,                           // 足够 800-1000 词 + 格式标记
+        temperature: isRetry ? 0.4 : 0.8,            // 重试时降低温度提高格式遵循度
+        thinking: { type: 'disabled' },              // 创意写作关闭推理链，避免消耗输出 token 配额
       });
       parsed = parseStoryResponse(result);
       validation = validateStoryFormat(parsed.body, words);
@@ -58,7 +59,12 @@ app.post('/api/translate', async (req, res) => {
     // 最多尝试 3 次，确保句数匹配
     for (let attempt = 0; attempt < 3; attempt++) {
       const prompt = buildTranslationPrompt(storyBody, sentenceCount);
-      const result = await callDeepSeek(prompt, { model: 'deepseek-v4-flash', max_tokens: 4096, temperature: 0.3 });
+      const result = await callDeepSeek(prompt, {
+        model: 'deepseek-v4-flash',
+        max_tokens: 4096,
+        temperature: 0.3,
+        thinking: { type: 'disabled' },
+      });
       translations = parseTranslationResponse(result);
       if (translations.length === sentenceCount) break;
       console.log(`翻译句数不匹配：期望 ${sentenceCount}，实际 ${translations.length}，重试第 ${attempt + 1} 次`);
@@ -94,19 +100,30 @@ app.post('/api/ocr', async (req, res) => {
 // ========== API 调用函数 ==========
 
 async function callDeepSeek(userPrompt, opts = {}) {
+  const body = {
+    model: opts.model || 'deepseek-v4-pro',
+    messages: [{ role: 'user', content: userPrompt }],
+    max_tokens: opts.max_tokens || 4096,
+  };
+
+  // temperature: thinking 模式下会被忽略，仅非 thinking 模式生效
+  if (opts.temperature !== undefined) {
+    body.temperature = opts.temperature;
+  }
+
+  // thinking: 显式传入才设置
+  // 创意写作建议关闭（thinking 会消耗 max_tokens 配额用于推理链，导致正文输出不足）
+  if (opts.thinking) {
+    body.thinking = opts.thinking;
+  }
+
   const resp = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${DEEPSEEK_KEY}`,
     },
-    body: JSON.stringify({
-      model: opts.model || 'deepseek-v4-pro',
-      messages: [{ role: 'user', content: userPrompt }],
-      max_tokens: opts.max_tokens || 4096,
-      temperature: opts.temperature ?? 0.7,
-      thinking: opts.model === 'deepseek-v4-flash' ? undefined : { type: 'enabled' },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
@@ -115,7 +132,22 @@ async function callDeepSeek(userPrompt, opts = {}) {
   }
 
   const data = await resp.json();
-  return data.choices[0].message.content;
+  const content = data.choices[0].message.content || '';
+
+  // 调试日志：响应异常时打印详细信息
+  if (!content || content.length < 50) {
+    console.log('⚠️ DeepSeek 响应异常 ——');
+    console.log('  content 长度:', content.length);
+    console.log('  content 预览:', content.substring(0, 200));
+    if (data.choices[0].message.reasoning_content) {
+      console.log('  reasoning_content 长度:', data.choices[0].message.reasoning_content.length);
+    }
+    if (data.usage) {
+      console.log('  usage:', JSON.stringify(data.usage));
+    }
+  }
+
+  return content;
 }
 
 async function callKimiOCR(base64Image) {
@@ -168,7 +200,7 @@ async function callKimiOCR(base64Image) {
 function buildStoryPrompt(words, retryReason) {
   const wordList = words.join(', ');
   const retryNote = retryReason
-    ? `\n\n⚠️ 上一次输出被拒绝，原因：${retryReason}\n请特别注意上述问题，务必遵守所有格式规则。`
+    ? `\n\n!!! RETRY: Previous output REJECTED. Reason: ${retryReason}\nPay extra attention to the FORMAT RULES below.`
     : '';
 
   return `You are a native English columnist. Write an 800-1000 word article that naturally uses ALL of my target vocabulary words. My English level is ~3500 words (high school); do NOT use other advanced words beyond my level.
@@ -177,13 +209,13 @@ TARGET WORDS (must ALL appear): ${wordList}
 
 WRITING RULES:
 - Pick a theme (short story, science article, opinion piece) that fits these words naturally.
-- Integrate every target word seamlessly — no forced sentences just to use a word.
+- Integrate every target word seamlessly -- no forced sentences just to use a word.
 - Mark target words with **bold** (e.g. **dilapidated**).
 - Use only high-school-level English for all other vocabulary.
 
-═══════════════════════════════════════
-CRITICAL OUTPUT FORMAT — VIOLATIONS WILL BE REJECTED
-═══════════════════════════════════════
+============================================
+CRITICAL OUTPUT FORMAT -- VIOLATIONS WILL BE REJECTED
+============================================
 
 You MUST output in EXACTLY this structure:
 
@@ -198,27 +230,28 @@ A third sentence alone on its own line.
 Start of a new paragraph.
 Continue with one sentence per line.
 
-── FORMAT RULES (READ CAREFULLY) ──
-1️⃣ ONE SENTENCE PER LINE. This is the #1 rule.
-   WRONG: "The sun rose. Birds sang. I woke up."  ← 3 sentences on 1 line → REJECTED
-   RIGHT:
-   The sun rose.
-   Birds sang.
-   I woke up.
+--- FORMAT RULES (read carefully) ---
 
-2️⃣ Every line inside ARTICLE must be exactly ONE English sentence.
-   After a period, question mark, or exclamation mark → NEW LINE.
+[1] ONE SENTENCE PER LINE. This is the #1 rule.
+    WRONG: "The sun rose. Birds sang. I woke up."  <-- 3 sentences on 1 line = REJECTED
+    RIGHT:
+    The sun rose.
+    Birds sang.
+    I woke up.
 
-3️⃣ Separate paragraphs with ONE empty line. Do NOT use indentation or extra spacing.
+[2] Every line inside ARTICLE must be exactly ONE English sentence.
+    After a period, question mark, or exclamation mark -> NEW LINE.
 
-4️⃣ Start with "TITLE:" on the first line, then "ARTICLE:" before the story body.
-   Never output "TITLE:" and "ARTICLE:" on the same line.
+[3] Separate paragraphs with ONE empty line. Do NOT use indentation or extra spacing.
 
-5️⃣ Wrap every target vocabulary word in **double asterisks**.
+[4] Start with "TITLE:" on the first line, then "ARTICLE:" before the story body.
+    Never output "TITLE:" and "ARTICLE:" on the same line.
 
-6️⃣ The article body must be 800-1000 words (≈30-60 lines).
+[5] Wrap EVERY target vocabulary word in **double asterisks**.
 
-── OUTPUT EXAMPLE ──
+[6] The article body must be 800-1000 words (roughly 30-60 lines).
+
+--- OUTPUT EXAMPLE ---
 TITLE: The Last Garden
 
 ARTICLE:
@@ -230,18 +263,21 @@ But Emily was different.
 Her **curiosity** drove her to explore places others ignored.
 She pushed open the rusted door and stepped inside.
 
-── SELF-VERIFICATION ──
-Before you output, mentally check:
-☑ Does every line after ARTICLE contain exactly ONE sentence?
-☑ Did I wrap ALL target words in **bold**?
-☑ Is the total length 800-1000 words?
-☑ Are paragraphs separated by blank lines?
-☑ Does the output start with "TITLE:" and include "ARTICLE:"?
+--- BEFORE YOU OUTPUT: VERIFY ---
+Mentally check each item below. If ANY check fails, FIX IT before responding:
+[*] Does every line after ARTICLE contain exactly ONE sentence?
+[*] Did I wrap ALL target words in **bold**?
+[*] Is the total length 800-1000 words?
+[*] Are paragraphs separated by blank lines?
+[*] Does the output start with "TITLE:" and include "ARTICLE:"?
 
-If ANY check fails, FIX IT before responding. Format errors waste time.${retryNote}`;
+Format errors waste time. Get it right the first time.${retryNote}`;
 }
 
 function buildTranslationPrompt(storyBody, sentenceCount) {
+  // 去掉生词 **粗体** 标记，避免翻译中残留 markdown 符号
+  const cleanBody = storyBody.replace(/\*\*/g, '');
+
   return `请先通读以下英文故事的全文，理解上下文和行文风格，然后将它翻译成地道流畅的中文。
 
 要求：
@@ -250,7 +286,7 @@ function buildTranslationPrompt(storyBody, sentenceCount) {
 3. 不要输出任何其他内容
 
 英文故事全文：
-${storyBody}`;
+${cleanBody}`;
 }
 
 // ========== 格式校验 ==========
@@ -320,10 +356,10 @@ function parseStoryResponse(text) {
     body = lines.slice(1).join('\n').trim();
   }
 
-  // 清理尾部可能残留的自检文本 / markdown 标记
+  // 清理尾部可能残留的自检文本 / markdown 标记 / 格式说明
   body = body
-    .replace(/──\s*SELF.VERIFICATION[\s\S]*$/i, '')
-    .replace(/SELF.VERIFICATION[\s\S]*$/i, '')
+    .replace(/---\s*BEFORE\s+YOU\s+OUTPUT[\s\S]*$/i, '')
+    .replace(/---\s*FORMAT\s+RULES[\s\S]*$/i, '')
     .replace(/```[\s\S]*$/, '')
     .trim();
 
