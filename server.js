@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3456;
 
 // ========== API 代理 ==========
 
-// 1. 故事生成 → DeepSeek
+// 1. 故事生成 → DeepSeek（最多重试 1 次）
 app.post('/api/generate-story', async (req, res) => {
   try {
     const { words } = req.body;
@@ -20,10 +20,22 @@ app.post('/api/generate-story', async (req, res) => {
       return res.status(400).json({ error: '请提供生词列表' });
     }
 
-    const prompt = buildStoryPrompt(words);
-    const result = await callDeepSeek(prompt, { max_tokens: 4096, temperature: 0.8 });
-    const parsed = parseStoryResponse(result);
-    const validation = validateStoryFormat(parsed.body, words);
+    let parsed, validation;
+    const MAX_ATTEMPTS = 2;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const isRetry = attempt > 0;
+      const prompt = buildStoryPrompt(words, isRetry ? validation?.reason : null);
+      const result = await callDeepSeek(prompt, {
+        max_tokens: 4096,
+        temperature: isRetry ? 0.4 : 0.8,  // 重试时降低温度，提高格式遵循度
+      });
+      parsed = parseStoryResponse(result);
+      validation = validateStoryFormat(parsed.body, words);
+      if (validation.valid) break;
+      console.log(`故事格式校验失败 (第${attempt + 1}次)：${validation.reason}，${isRetry ? '已放弃' : '准备重试'}`);
+    }
+
     if (!validation.valid) {
       throw new Error(`格式校验失败：${validation.reason}，请重试`);
     }
@@ -153,32 +165,80 @@ async function callKimiOCR(base64Image) {
 
 // ========== 提示词构建 ==========
 
-function buildStoryPrompt(words) {
+function buildStoryPrompt(words, retryReason) {
   const wordList = words.join(', ');
-  return `你现在是一位拥有丰富经验的英语母语外教，同时也是一位擅长长篇写作的专栏作家。我需要你帮我创作一篇高质量的长篇文章，以便我能在自然连贯的语境中记忆一批生词。
+  const retryNote = retryReason
+    ? `\n\n⚠️ 上一次输出被拒绝，原因：${retryReason}\n请特别注意上述问题，务必遵守所有格式规则。`
+    : '';
 
-【输入信息】
-我的目标生词：${wordList}
-文章目标字数： 800 - 1000 词。
-我的当前英语水平： 高中3500词左右
+  return `You are a native English columnist. Write an 800-1000 word article that naturally uses ALL of my target vocabulary words. My English level is ~3500 words (high school); do NOT use other advanced words beyond my level.
 
-【写作核心原则】（非常重要！）
-严禁"缝合怪"： 请先分析这批生词的词性、褒贬义和所属领域。构思一个最能合理包容这些词汇的主题（可以是一篇引人入胜的短篇小说、深度的科普文章，或时事评论）。文章的逻辑必须极度自洽，绝不能为了凑词而写出违背常理的生硬句子。
-稀释密度： 必须保证文章长度达到 800-1000 词，确保生词在全文中均匀分布，生词密度控制在 5% 以内。
-地道搭配： 生词的用法必须符合英语母语者的习惯搭配（Collocations），保留单词在真实语境中的最常见用法。
-词汇控制： 除了我提供的生词外，全文其他词汇必须控制在高中3500词以内，不得使用超出我当前水平的生僻词。让我专注记忆目标生词，而不是被其他难词分散注意力。
+TARGET WORDS (must ALL appear): ${wordList}
 
-【硬性要求】（必须严格遵守！）
-你必须使用上面列出的全部生词，一个都不能少。如果遗漏了任何一个生词，你的回答将被视为不合格。
+WRITING RULES:
+- Pick a theme (short story, science article, opinion piece) that fits these words naturally.
+- Integrate every target word seamlessly — no forced sentences just to use a word.
+- Mark target words with **bold** (e.g. **dilapidated**).
+- Use only high-school-level English for all other vocabulary.
 
-【输出格式要求】（非常重要！）
-请严格按以下格式输出：
+═══════════════════════════════════════
+CRITICAL OUTPUT FORMAT — VIOLATIONS WILL BE REJECTED
+═══════════════════════════════════════
 
-TITLE: [英文标题]
+You MUST output in EXACTLY this structure:
+
+TITLE: [English Title Here]
 
 ARTICLE:
-[每行一个英文句子，生词用 **粗体** 标记，段落之间用一个空行分隔]
-[务必一句一行！！！不要将多个句子写在同一行]`;
+One sentence per line.
+Another sentence on its own line.
+A third sentence alone on its own line.
+
+[blank line between paragraphs]
+Start of a new paragraph.
+Continue with one sentence per line.
+
+── FORMAT RULES (READ CAREFULLY) ──
+1️⃣ ONE SENTENCE PER LINE. This is the #1 rule.
+   WRONG: "The sun rose. Birds sang. I woke up."  ← 3 sentences on 1 line → REJECTED
+   RIGHT:
+   The sun rose.
+   Birds sang.
+   I woke up.
+
+2️⃣ Every line inside ARTICLE must be exactly ONE English sentence.
+   After a period, question mark, or exclamation mark → NEW LINE.
+
+3️⃣ Separate paragraphs with ONE empty line. Do NOT use indentation or extra spacing.
+
+4️⃣ Start with "TITLE:" on the first line, then "ARTICLE:" before the story body.
+   Never output "TITLE:" and "ARTICLE:" on the same line.
+
+5️⃣ Wrap every target vocabulary word in **double asterisks**.
+
+6️⃣ The article body must be 800-1000 words (≈30-60 lines).
+
+── OUTPUT EXAMPLE ──
+TITLE: The Last Garden
+
+ARTICLE:
+The old **greenhouse** stood forgotten behind the abandoned school.
+Its glass panels were cracked, and ivy had claimed every surface.
+Nobody in town remembered who had built it.
+
+But Emily was different.
+Her **curiosity** drove her to explore places others ignored.
+She pushed open the rusted door and stepped inside.
+
+── SELF-VERIFICATION ──
+Before you output, mentally check:
+☑ Does every line after ARTICLE contain exactly ONE sentence?
+☑ Did I wrap ALL target words in **bold**?
+☑ Is the total length 800-1000 words?
+☑ Are paragraphs separated by blank lines?
+☑ Does the output start with "TITLE:" and include "ARTICLE:"?
+
+If ANY check fails, FIX IT before responding. Format errors waste time.${retryNote}`;
 }
 
 function buildTranslationPrompt(storyBody, sentenceCount) {
@@ -203,7 +263,7 @@ function validateStoryFormat(body, words) {
   const lines = body.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const wordCount = body.replace(/\*\*/g, '').split(/\s+/).filter(w => w.length > 0).length;
 
-  // 1. 行数检查（800-1000 词的故事至少 25 行）
+  // 1. 行数检查（800-1000 词按一句一行至少 30+ 行，15 行是底线）
   if (lines.length < 15) {
     return { valid: false, reason: `仅 ${lines.length} 行，未按一句一行输出` };
   }
@@ -259,6 +319,13 @@ function parseStoryResponse(text) {
     title = lines[0].replace(/^#+\s*/, '').trim();
     body = lines.slice(1).join('\n').trim();
   }
+
+  // 清理尾部可能残留的自检文本 / markdown 标记
+  body = body
+    .replace(/──\s*SELF.VERIFICATION[\s\S]*$/i, '')
+    .replace(/SELF.VERIFICATION[\s\S]*$/i, '')
+    .replace(/```[\s\S]*$/, '')
+    .trim();
 
   return { title, body };
 }
