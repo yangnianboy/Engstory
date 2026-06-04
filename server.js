@@ -27,9 +27,8 @@ app.post('/api/generate-story', async (req, res) => {
       const isRetry = attempt > 0;
       const prompt = buildStoryPrompt(words, isRetry ? validation?.reason : null);
       const result = await callDeepSeek(prompt, {
-        max_tokens: 16384,                           // 足够 800-1000 词 + 格式标记
-        temperature: isRetry ? 0.4 : 0.8,            // 重试时降低温度提高格式遵循度
-        thinking: { type: 'disabled' },              // 创意写作关闭推理链，避免消耗输出 token 配额
+        max_tokens: 32768,                           // 推理链 + 800-1000 词故事，给足空间
+        thinking: { type: 'enabled' },               // 启用思考模式提升故事质量
       });
       parsed = parseStoryResponse(result);
       validation = validateStoryFormat(parsed.body, words);
@@ -203,75 +202,86 @@ function buildStoryPrompt(words, retryReason) {
     ? `\n\n!!! RETRY: Previous output REJECTED. Reason: ${retryReason}\nPay extra attention to the FORMAT RULES below.`
     : '';
 
-  return `You are a native English columnist. Write an 800-1000 word article that naturally uses ALL of my target vocabulary words. My English level is ~3500 words (high school); do NOT use other advanced words beyond my level.
+  return `You are a bestselling fiction writer and native English speaker. Write an 800-1000 word short story that naturally uses ALL my target vocabulary words. My English level is ~3500 words (high school); do NOT use other advanced words.
 
 TARGET WORDS (must ALL appear): ${wordList}
 
-WRITING RULES:
-- Pick a theme (short story, science article, opinion piece) that fits these words naturally.
-- Integrate every target word seamlessly -- no forced sentences just to use a word.
-- Mark target words with **bold** (e.g. **dilapidated**).
-- Use only high-school-level English for all other vocabulary.
-
 ============================================
-CRITICAL OUTPUT FORMAT -- VIOLATIONS WILL BE REJECTED
+STORYTELLING PRINCIPLES — make it compelling
 ============================================
 
-You MUST output in EXACTLY this structure:
+[HOOK] Open with a gripping first sentence. Start in the middle of action, a mystery, or a striking image. Never begin with exposition or backstory.
 
-TITLE: [English Title Here]
+[CHARACTER] Give the protagonist a clear desire or problem. Make readers care within the first 3 sentences. Use specific, concrete details — not "she was sad" but "she stared at the cracked photo frame until her tea went cold."
+
+[CONFLICT] Every good story needs tension. Something is at stake. Someone wants something and something stands in their way. The obstacle can be external (a person, a storm, a deadline) or internal (fear, guilt, a secret).
+
+[SHOW DON'T TELL] Use sensory details — sight, sound, smell, touch. Let readers infer emotions from actions and dialogue. Use metaphors and similes sparingly but effectively.
+
+[PACING] Vary sentence length. Short sentences create tension. Longer ones build atmosphere. Mix them to control rhythm.
+
+[ENDING] Close with resonance, not summary. A good ending echoes the opening, reveals something unexpected, or leaves a lingering question. Avoid "and then they learned a valuable lesson."
+
+[DIALOGUE] If you include dialogue, make it sound natural. People interrupt. They don't always answer the question. Use dialogue to reveal character, not to dump information.
+
+[THEME] Let the target vocabulary words suggest the theme. Words about nature -> a wilderness survival tale. Words about betrayal -> a psychological drama. The words should feel inevitable, not inserted.
+
+============================================
+CRITICAL OUTPUT FORMAT — VIOLATIONS WILL BE REJECTED
+============================================
+
+TITLE: [English Title]
 
 ARTICLE:
 One sentence per line.
 Another sentence on its own line.
-A third sentence alone on its own line.
 
 [blank line between paragraphs]
-Start of a new paragraph.
-Continue with one sentence per line.
+New paragraph starts here.
+One sentence per line always.
 
---- FORMAT RULES (read carefully) ---
+--- FORMAT RULES ---
 
-[1] ONE SENTENCE PER LINE. This is the #1 rule.
-    WRONG: "The sun rose. Birds sang. I woke up."  <-- 3 sentences on 1 line = REJECTED
+[1] ONE SENTENCE PER LINE — absolute rule #1.
+    WRONG: "The door creaked. She froze. Footsteps approached."  <-- REJECTED
     RIGHT:
-    The sun rose.
-    Birds sang.
-    I woke up.
+    The door creaked.
+    She froze.
+    Footsteps approached.
 
-[2] Every line inside ARTICLE must be exactly ONE English sentence.
-    After a period, question mark, or exclamation mark -> NEW LINE.
+[2] After every period, question mark, or exclamation mark -> NEW LINE.
 
-[3] Separate paragraphs with ONE empty line. Do NOT use indentation or extra spacing.
+[3] Separate paragraphs with ONE empty line. No indentation.
 
-[4] Start with "TITLE:" on the first line, then "ARTICLE:" before the story body.
-    Never output "TITLE:" and "ARTICLE:" on the same line.
+[4] Output must start with "TITLE:" on the first line, then "ARTICLE:" on its own line.
 
-[5] Wrap EVERY target vocabulary word in **double asterisks**.
+[5] Wrap EVERY target word in **bold** (e.g. **dilapidated**).
 
-[6] The article body must be 800-1000 words (roughly 30-60 lines).
+[6] 800-1000 words total (~30-60 lines).
 
 --- OUTPUT EXAMPLE ---
-TITLE: The Last Garden
+TITLE: The Lighthouse Keeper's Last Entry
 
 ARTICLE:
-The old **greenhouse** stood forgotten behind the abandoned school.
-Its glass panels were cracked, and ivy had claimed every surface.
-Nobody in town remembered who had built it.
+The **solitary** beam of light swept across the black water for the final time.
+James closed the logbook and set down his pen.
 
-But Emily was different.
-Her **curiosity** drove her to explore places others ignored.
-She pushed open the rusted door and stepped inside.
+For forty-seven years, he had performed this exact **ritual**.
+Every dusk, the same sequence of levers and switches.
+Every dawn, the same climb down the spiral stairs.
+
+Tonight was different.
+
+A ship on the horizon was moving straight toward the rocks.
 
 --- BEFORE YOU OUTPUT: VERIFY ---
-Mentally check each item below. If ANY check fails, FIX IT before responding:
-[*] Does every line after ARTICLE contain exactly ONE sentence?
-[*] Did I wrap ALL target words in **bold**?
-[*] Is the total length 800-1000 words?
+[*] Does every line contain exactly ONE sentence?
+[*] Are ALL target words wrapped in **bold**?
+[*] Is the total 800-1000 words?
+[*] Does the story hook the reader from the first line?
 [*] Are paragraphs separated by blank lines?
-[*] Does the output start with "TITLE:" and include "ARTICLE:"?
 
-Format errors waste time. Get it right the first time.${retryNote}`;
+Get it right the first time. A boring story is a failed story.${retryNote}`;
 }
 
 function buildTranslationPrompt(storyBody, sentenceCount) {
